@@ -14,7 +14,7 @@ from PIL import Image
 img_dir = 'img/'
 delay_degree = 0
 crop_w, crop_h = 200, 200
-last_im_a = 0
+last_im_a = None
 region = [int((2560 - crop_w) / 2), int((1440 - crop_h) / 2),
           crop_w, crop_h]
 toggle = True
@@ -529,7 +529,8 @@ def driver():
             im_array = win_screenshot(region[0], region[1], crop_w, crop_h)
             timer(im_array, t)
     except KeyboardInterrupt:
-        Image.fromarray(last_im_a).save(img_dir + 'last_log.png')
+        if last_im_a:
+            Image.fromarray(last_im_a).save(img_dir + 'last_log.png')
 
 
 def cal_degree(x, y):

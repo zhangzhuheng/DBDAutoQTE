@@ -2,21 +2,16 @@ import math
 import threading
 import time
 
+import dxcam
 import keyboard
 import numpy as np
-import pyautogui
-import win32con
-import win32gui
-import win32ui
+import win32api
 import winsound
-from PIL import Image
+from PIL import Image, ImageGrab
 
 img_dir = 'img/'
 delay_degree = 0
-crop_w, crop_h = 200, 200
 last_im_a = None
-region = [int((2560 - crop_w) / 2), int((1440 - crop_h) / 2),
-          crop_w, crop_h]
 toggle = True
 keyboard_switch = True
 frame_rate = 60
@@ -48,32 +43,6 @@ def sleep_to(time_stamp):
         if offset >= 0:
             # print(offset)
             break
-
-
-def win_screenshot(startw, starth, w, h):
-    # bmpfilenamename = "out.bmp" #set this
-
-    hwnd = 0  # window ID, 0 represents current active window
-    # hwnd = win32gui.FindWindow(None, windowname)
-    wDC = win32gui.GetWindowDC(hwnd)
-    dcObj = win32ui.CreateDCFromHandle(wDC)
-    cDC = dcObj.CreateCompatibleDC()
-    dataBitMap = win32ui.CreateBitmap()
-    dataBitMap.CreateCompatibleBitmap(dcObj, w, h)
-    cDC.SelectObject(dataBitMap)
-    cDC.BitBlt((0, 0), (w, h), dcObj, (startw, starth), win32con.SRCCOPY)
-    # dataBitMap.SaveBitmapFile(cDC, bmpfilenamename)
-    signedIntsArray = dataBitMap.GetBitmapBits(True)
-    img_array = np.frombuffer(signedIntsArray, dtype='uint8')
-    # Free Resources
-    dcObj.DeleteDC()
-    cDC.DeleteDC()
-    win32gui.ReleaseDC(hwnd, wDC)
-    win32gui.DeleteObject(dataBitMap.GetHandle())
-    img_array.shape = (h, w, 4)
-    img_array = np.delete(img_array, 3, 2)[..., ::-1]
-    # Image.fromarray(img_array).show()
-    return img_array
 
 
 def find_red(im_array):
@@ -157,10 +126,10 @@ def find_square(im_array):
     if not r_i or not r_j:
         return
     # if max_d < 1:
-    #     return 
+    #     return
     pre_d = 0
     post_d = 0
-    target = cal_degree(r_i - crop_h / 2, r_j - crop_w / 2)
+    target = cal_degree(r_i - qte_region.height / 2, r_j - qte_region.width / 2)
     sin = math.sin(2 * math.pi * target / 360)
     cos = math.cos(2 * math.pi * target / 360)
     for i in range(max_d, 21):
@@ -195,8 +164,8 @@ def find_square(im_array):
             return
         r2_i, r2_j, max_d = find_thickest_point(shape, target_points)
         if max_d < 3:
-            target1 = cal_degree(r_i - crop_h / 2, r_j - crop_w / 2)
-            target2 = cal_degree(r2_i - crop_h / 2, r2_j - crop_w / 2)
+            target1 = cal_degree(r_i - qte_region.height / 2, r_j - qte_region.width / 2)
+            target2 = cal_degree(r2_i - qte_region.height / 2, r2_j - qte_region.width / 2)
             print('storm points', r_i, r_j, r2_i, r2_j)
             if target1 < target2:
                 pre_white = (r_i, r_j)
@@ -215,7 +184,7 @@ def find_square(im_array):
     if list(im_array[new_white[0]][new_white[1]]) != [0, 0, 255]:
         print("new white error")
         return
-    # 
+    #
 
     return new_white, pre_white, post_white
 
@@ -229,7 +198,7 @@ def wiggle(t1, deg1, direction, im1):
     predict_time = min(delta_deg1 / speed, delta_deg2 / speed)
     print("predict time", predict_time)
     # sleep(0.75)
-    # return #debug 
+    # return #debug
 
     click_time = t1 + predict_time - press_and_release_delay + delay_degree / abs(speed)
 
@@ -263,21 +232,21 @@ def timer(im1, t1):
     if not r1:
         return
 
-    deg1 = cal_degree(r1[0] - crop_h / 2, r1[1] - crop_w / 2)
+    deg1 = cal_degree(r1[0] - qte_region.height / 2, r1[1] - qte_region.width / 2)
 
     # print('first seen:',deg1,t1)
     global last_im_a
 
     # sleep(1.5)
-    # return #debug 
-    im2 = win_screenshot(region[0], region[1], crop_w, crop_h)
+    # return #debug
+    im2 = qte_region_camera.get_latest_frame()
 
     r2 = find_red(im2)
 
     if not r2:
         return
 
-    deg2 = cal_degree(r2[0] - crop_h / 2, r2[1] - crop_w / 2)
+    deg2 = cal_degree(r2[0] - qte_region.height / 2, r2[1] - qte_region.width / 2)
     if deg1 == deg2:
         # print("red same")
         return
@@ -314,7 +283,7 @@ def timer(im1, t1):
     print('targeting_time:', time.time() - t1)
     print('speed:', speed)
 
-    target = cal_degree(white[0] - crop_h / 2, white[1] - crop_w / 2)
+    target = cal_degree(white[0] - qte_region.height / 2, white[1] - qte_region.width / 2)
     # target=180
 
     # if target< 45 or target > 315 or (target>135 and target<225):
@@ -328,7 +297,7 @@ def timer(im1, t1):
 
     print("predict time", delta_deg / speed)
     # sleep(0.75)
-    # return #debug 
+    # return #debug
 
     click_time = t1 + delta_deg / speed - press_and_release_delay + delay_degree / abs(speed)
     # print("minus ",click_time%(1/frame_rate))
@@ -336,7 +305,7 @@ def timer(im1, t1):
     delta_t = click_time - time.time()
 
     # sin=math.sin(2*math.pi*target/360)
-    # cos=math.cos(2*math.pi*target/360) 
+    # cos=math.cos(2*math.pi*target/360)
     max_d = r1[2]
     global delay_pixel
     start_point = post_white
@@ -354,7 +323,7 @@ def timer(im1, t1):
     if abs(end_point[0] - start_point[0]) < abs(end_point[1] - start_point[1]):
         for j in range(start_point[1], end_point[1], 2 * np.sign(end_point[1] - start_point[1])):
             i = start_point[0] + (end_point[0] - start_point[0]) / (end_point[1] - start_point[1]) * (
-                        j - start_point[1])
+                    j - start_point[1])
             i = round(i)
             check_points.append((i, j))
     elif np.sign(end_point[0] - start_point[0]) == 0:
@@ -362,7 +331,7 @@ def timer(im1, t1):
     else:
         for i in range(start_point[0], end_point[0], 2 * np.sign(end_point[0] - start_point[0])):
             j = start_point[1] + (end_point[1] - start_point[1]) / (end_point[0] - start_point[0]) * (
-                        i - start_point[0])
+                    i - start_point[0])
             j = round(j)
             check_points.append((i, j))
     check_points.append(end_point)
@@ -372,11 +341,11 @@ def timer(im1, t1):
     if abs(end_point[0] - start_point[0]) ** 2 + abs(end_point[1] - start_point[1]) ** 2 < 20 ** 2:
         start_point = pre_white
         end_point = (end_point[0] + delta_i, end_point[1] + delta_j)
-        # if the white area is  too large don't use pre_4deg
+        # if the white area is too large don't use pre_4deg
         if abs(end_point[0] - start_point[0]) < abs(end_point[1] - start_point[1]):
             for j in range(start_point[1], end_point[1], 2 * np.sign(end_point[1] - start_point[1])):
                 i = start_point[0] + (end_point[0] - start_point[0]) / (end_point[1] - start_point[1]) * (
-                            j - start_point[1])
+                        j - start_point[1])
                 i = round(i)
                 pre_4deg_check_points.append((i, j))
         elif np.sign(end_point[0] - start_point[0]) == 0:
@@ -384,7 +353,7 @@ def timer(im1, t1):
         else:
             for i in range(start_point[0], end_point[0], 2 * np.sign(end_point[0] - start_point[0])):
                 j = start_point[1] + (end_point[1] - start_point[1]) / (end_point[0] - start_point[0]) * (
-                            i - start_point[0])
+                        i - start_point[0])
                 j = round(j)
                 pre_4deg_check_points.append((i, j))
         pre_4deg_check_points.append(end_point)
@@ -416,7 +385,7 @@ def timer(im1, t1):
         im_array_pre_backup = None
         while True:
             out = False
-            im_array_pre = win_screenshot(region[0], region[1], crop_w, crop_h)
+            im_array_pre = qte_region_camera.get_latest_frame()
             checks_after_awake += 1
 
             for i, j in check_points:
@@ -449,7 +418,7 @@ def timer(im1, t1):
             return
 
         keyboard.press_and_release('space')
-        print('check times: ', check_times)
+        print('check times', check_times)
         if checks_after_awake <= 1:
             print('[!]awake quick space!!', delta_t, '\nspeed:', speed)
             file_name = 'awake'
@@ -474,7 +443,7 @@ def timer(im1, t1):
         if not r3:
             return
 
-        deg3 = cal_degree(r3[0] - crop_h / 2, r3[1] - crop_w / 2)
+        deg3 = cal_degree(r3[0] - qte_region.height / 2, r3[1] - qte_region.width / 2)
         real_delta_deg = deg3 - target
 
         im_array_pre[r1[0]][r1[1]] = [0, 255, 0]
@@ -497,7 +466,7 @@ def timer(im1, t1):
         file_name = img_dir + file_name
         Image.fromarray(im_array_pre).save(file_name)
         # sleep(0.3)
-        if (hyperfocus):
+        if hyperfocus:
             print('focus hit:', focus_level)
             focus_level = min(6, (focus_level + 1))
     except ValueError as e:
@@ -508,29 +477,53 @@ def timer(im1, t1):
     # TODO: if white in im2
 
 
+RESOLUTION_CROP_MAPPING = {
+    (1920, 1080): (150, 150),
+    (2560, 1440): (200, 200),
+    (2560, 1600): (250, 250),
+    (3840, 2160): (330, 330),
+}
+
+
+class QTERegion:
+    def __init__(self):
+        self.screen_w, self.screen_h = ImageGrab.grab().size
+        self.width = None
+        self.height = None
+        self.screenshot_region = None
+        self._set_size()
+        self._set_qte_screenshot_region()
+
+    def _set_size(self):
+        if (self.screen_w, self.screen_h) in RESOLUTION_CROP_MAPPING.keys():
+            self.width, self.height = RESOLUTION_CROP_MAPPING.get((self.screen_w, self.screen_h))
+        else:
+            raise Exception(f'The current resolution setting {self.screen_w, self.screen_h} is not supported.\n'
+                            f'Please try setting it to the following resolution and restart: '
+                            f'{list(RESOLUTION_CROP_MAPPING.keys())}')
+
+    def _set_qte_screenshot_region(self):
+        left, top = (self.screen_w - self.width) // 2, (self.screen_h - self.height) // 2
+        right, bottom = left + self.width, top + self.height
+        self.screenshot_region = (left, top, right, bottom)
+
+
+qte_region = QTERegion()
+fps = win32api.EnumDisplaySettings(win32api.EnumDisplayDevices().DeviceName, -1).DisplayFrequency
+qte_region_camera = dxcam.create()
+qte_region_camera.start(region=qte_region.screenshot_region, target_fps=fps, video_mode=True)
+
+
 def driver():
-    # result = {}
-    global crop_w, crop_h
-    im = pyautogui.screenshot()
-    if im.height == 1600:  # 2560*1600
-        crop_w, crop_h = 250, 250
-    elif im.height == 1080:  # 1920*1080
-        crop_w, crop_h = 150, 150
-    elif im.height == 2160:  # 3840*2160
-        crop_w, crop_h = 330, 330
-    global region
-    region = [int((im.width - crop_w) / 2), int((im.height - crop_h) / 2),
-              crop_w, crop_h]
     try:
-        while (True):
-            # im = Image.open('img/1.png')
-            # print('start',time.time())
-            t = time.time()
-            im_array = win_screenshot(region[0], region[1], crop_w, crop_h)
-            timer(im_array, t)
+        print('starting')
+        while True:
+            timer(qte_region_camera.get_latest_frame(), time.time())
     except KeyboardInterrupt:
         if last_im_a:
             Image.fromarray(last_im_a).save(img_dir + 'last_log.png')
+    finally:
+        qte_region_camera.stop()
 
 
 def cal_degree(x, y):
@@ -620,7 +613,6 @@ def main():
         os.mkdir(img_dir)
     keyboard.on_press(keyboard_callback)
     threading.Thread(target=keyboard.wait)
-    print('starting')
     driver()
 
 

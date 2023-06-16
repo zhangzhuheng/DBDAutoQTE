@@ -28,23 +28,6 @@ red_sensitive = 180
 focus_level = 0
 
 
-def sleep(t):
-    st = time.time()
-    while True:
-        offset = time.time() - st
-        if offset >= t:
-            # print(offset)
-            break
-
-
-def sleep_to(time_stamp):
-    while True:
-        offset = time.time() - time_stamp
-        if offset >= 0:
-            # print(offset)
-            break
-
-
 def find_red(im_array):
     shape = im_array.shape
 
@@ -202,21 +185,21 @@ def wiggle(t1, deg1, direction, im1):
 
     click_time = t1 + predict_time - press_and_release_delay + delay_degree / abs(speed)
 
-    delta_t = click_time - time.time()
+    delta_t = click_time - time.perf_counter()
 
     # print('delta_t',delta_t)
     if 0 > delta_t > -0.1:
         keyboard.press_and_release('space')
         print('quick space!!', delta_t, '\nspeed:', speed)
-        sleep(0.13)
+        time.sleep(0.13)
         return
     try:
-        delta_t = click_time - time.time()
-        sleep(delta_t)
+        delta_t = click_time - time.perf_counter()
+        time.sleep(delta_t)
         keyboard.press_and_release('space')
         print('space!!', delta_t, '\nspeed:', speed)
         Image.fromarray(im1).save(img_dir + 'log.png')
-        sleep(0.13)
+        time.sleep(0.13)
     except ValueError as e:
 
         # winsound.Beep(230,300)
@@ -227,7 +210,7 @@ def timer(im1, t1):
     global focus_level
     if not toggle:
         return
-    # print('timer',time.time())
+    # print('timer',time.perf_counter())
     r1 = find_red(im1)
     if not r1:
         return
@@ -280,7 +263,7 @@ def timer(im1, t1):
     im1[white[0]][white[1]] = [0, 255, 0]
     last_im_a = im1
 
-    print('targeting_time:', time.time() - t1)
+    print('targeting_time:', time.perf_counter() - t1)
     print('speed:', speed)
 
     target = cal_degree(white[0] - qte_region.height / 2, white[1] - qte_region.width / 2)
@@ -302,7 +285,7 @@ def timer(im1, t1):
     click_time = t1 + delta_deg / speed - press_and_release_delay + delay_degree / abs(speed)
     # print("minus ",click_time%(1/frame_rate))
     # click_time-=click_time%(1/frame_rate)
-    delta_t = click_time - time.time()
+    delta_t = click_time - time.perf_counter()
 
     # sin=math.sin(2*math.pi*target/360)
     # cos=math.cos(2*math.pi*target/360)
@@ -376,7 +359,7 @@ def timer(im1, t1):
             focus_level = (focus_level + 1) % 7
         return
     try:
-        delta_t = click_time - time.time()
+        delta_t = click_time - time.perf_counter()
         # sleep(max(0,delta_t-0.1))
 
         # trying to catch
@@ -405,11 +388,11 @@ def timer(im1, t1):
                     im_array_pre[i][j] = [255, 255, 0]
                     t = 4 / speed_now * (1 + k) / len(pre_4deg_check_points) - press_and_release_delay
                     if t > 0:
-                        sleep(t)
+                        time.sleep(t)
                     break
             if out:
                 break
-            if time.time() > click_time + 0.04:
+            if time.perf_counter() > click_time + 0.04:
                 print('catch time out')
                 break
             im_array_pre_backup = im_array_pre
@@ -518,7 +501,7 @@ def driver():
     try:
         print('starting')
         while True:
-            timer(qte_region_camera.get_latest_frame(), time.time())
+            timer(qte_region_camera.get_latest_frame(), time.perf_counter())
     except KeyboardInterrupt:
         if last_im_a:
             Image.fromarray(last_im_a).save(img_dir + 'last_log.png')

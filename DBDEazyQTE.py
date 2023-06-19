@@ -24,66 +24,82 @@ color_sensitive = 125
 delay_pixel = 0
 speed_now = repair_speed
 hyperfocus = False
-red_sensitive = 180
+red_threshold = 180
 focus_level = 0
 
 
-def find_red(im_array):
-    shape = im_array.shape
+def find_largest_square(shape: tuple, target_points: list[tuple[int, int]]) -> tuple[int, int, int] | None:
+    """
+    Find the largest square that contains all the given target points using binary search.
 
-    target_points = []
-    for i in range(shape[0]):
-        for j in range(shape[1]):
-            if im_array[i][j][0] > red_sensitive and im_array[i][j][1] < 20 and im_array[i][j][2] < 20:
-                l1, l2 = i - shape[0] / 2, j - shape[1] / 2
-                if l1 * l1 + l2 * l2 > shape[0] * shape[0] / 4:
-                    # print('not in circle:',i,j)
-                    continue
-                im_array[i][j] = [255, 0, 0]
-                target_points.append((i, j))
-    if not target_points:
-        return
-    # print(target_points)
-    r_i, r_j, max_d = find_thickest_point(shape, target_points)
-    if max_d < 1:
-        return
-    # print("red:",r_i, r_j)
-    if not r_i or not r_j:
-        return
+    :param shape: Shape of the image.
+    :param target_points: Coordinates of target points.
+    :return: Center and side length of the largest square.
+    """
+    center_i, center_j = target_points[0]
+    max_side_length = 0
 
-    return r_i, r_j, max_d
-
-
-# def find_thickest_point(im_array,r_i,r_j,target_points):
-#     from line_profiler import LineProfiler
-#     lp = LineProfiler()
-#     lp_wrapper = lp(find_thickest_point_pre)
-#     result=lp_wrapper(im_array,r_i,r_j,target_points)
-#     lp.print_stats()
-#     return result
-
-def find_thickest_point(shape, target_points):
-    # print(shape)
-    target_map = np.zeros((shape[0], shape[1]), dtype=bool)
+    mark = np.zeros((shape[0], shape[1]), dtype=bool)
     for i, j in target_points:
-        target_map[i][j] = True
-    max_r = target_points[0]
-    max_d = 0
+        mark[i][j] = True
 
-    for i, j in target_points:
-        for d in range(1, 20):
-            if i + d >= shape[0] or j + d >= shape[1] or j - d < 0 or i - d < 0:
-                break
-            elif target_map[i + d][j + d] and target_map[i - d][j - d] and target_map[i - d][j + d] and \
-                    target_map[i + d][j - d]:
-                if d > max_d:
-                    max_d = d
-                    max_r = [i, j]
-                    # print(max_r,max_d,im_array[i+d][j+d],im_array[i-d][j+d],im_array[i+d][j-d],im_array[i-d][j-d])
-            else:
-                break
-    r_i, r_j = max_r[0], max_r[1]
-    return r_i, r_j, max_d
+    def check(_l: int) -> bool:
+        nonlocal center_i, center_j
+        for _i, _j in target_points:
+            if _i + _l >= shape[0] or _j + _l >= shape[1] or _j - _l < 0 or _i - _l < 0:
+                continue
+            if mark[_i + _l][_j + _l] and mark[_i - _l][_j - _l] and mark[_i - _l][_j + _l] and mark[_i + _l][_j - _l]:
+                center_i, center_j = _i, _j
+                return True
+        return False
+
+    left, right = 1, min(shape[0], shape[1])
+    while left <= right:
+        mid = (left + right) // 2
+        if check(mid):
+            left = mid + 1
+            max_side_length = mid
+        else:
+            right = mid - 1
+
+    if max_side_length < 1:
+        return None
+    return center_i, center_j, max_side_length
+
+
+def find_largest_red_square(image: np.ndarray) -> tuple[int, int, int] | None:
+    """
+    Find the largest square that contains only red pixels in the given image.
+
+    :param image: Input image.
+    :return: Center and radius of the largest square, or None if no such square is found.
+    """
+    shape = image.shape
+
+    # Create a boolean mask for red pixels
+    red_mask = image[..., 0] > red_threshold
+    non_red_mask = np.logical_or(image[..., 1] >= 20, image[..., 2] >= 20)
+    logical_array = np.logical_and(red_mask, ~non_red_mask)
+
+    # Create a boolean mask for pixels inside the central square
+    row, col = np.ogrid[:shape[0], :shape[1]]
+    center_row, center_col = shape[0] / 2, shape[1] / 2
+    inner_disk_mask = ((row - center_row) ** 2 + (col - center_col) ** 2) <= (shape[0] / 2) ** 2
+
+    # Combine the two masks
+    logical_array = np.logical_and(logical_array, inner_disk_mask)
+
+    # Find the coordinates of target points
+    target_points = np.argwhere(logical_array)
+
+    if not len(target_points):
+        return None
+
+    # Change the color of target points to pure red
+    image[target_points[:, 0], target_points[:, 1]] = [255, 0, 0]
+
+    # Find the largest square that contains only target points
+    return find_largest_square(shape[:2], target_points)
 
 
 def find_square(im_array):
@@ -103,7 +119,7 @@ def find_square(im_array):
     if not target_points:
         return
 
-    r_i, r_j, max_d = find_thickest_point(shape, target_points)
+    r_i, r_j, max_d = find_largest_square(shape, target_points)
 
     # print("white square:",r_i, r_j)
     if not r_i or not r_j:
@@ -145,7 +161,7 @@ def find_square(im_array):
         print('after', target_points)
         if not target_points:
             return
-        r2_i, r2_j, max_d = find_thickest_point(shape, target_points)
+        r2_i, r2_j, max_d = find_largest_square(shape, target_points)
         if max_d < 3:
             target1 = cal_degree(r_i - qte_region.height / 2, r_j - qte_region.width / 2)
             target2 = cal_degree(r2_i - qte_region.height / 2, r2_j - qte_region.width / 2)
@@ -211,7 +227,7 @@ def timer(im1, t1):
     if not toggle:
         return
     # print('timer',time.perf_counter())
-    r1 = find_red(im1)
+    r1 = find_largest_red_square(im1)
     if not r1:
         return
 
@@ -224,7 +240,7 @@ def timer(im1, t1):
     # return #debug
     im2 = qte_region_camera.get_latest_frame()
 
-    r2 = find_red(im2)
+    r2 = find_largest_red_square(im2)
 
     if not r2:
         return
@@ -372,7 +388,7 @@ def timer(im1, t1):
             checks_after_awake += 1
 
             for i, j in check_points:
-                if im_array_pre[i][j][0] > red_sensitive and im_array_pre[i][j][1] < 20 and im_array_pre[i][j][2] < 20:
+                if im_array_pre[i][j][0] > red_threshold and im_array_pre[i][j][1] < 20 and im_array_pre[i][j][2] < 20:
                     out = True
                     im_array_pre[i][j] = [0, 255, 255]
                     check_times = 1
@@ -382,7 +398,7 @@ def timer(im1, t1):
 
             for k in range(len(pre_4deg_check_points)):
                 i, j = pre_4deg_check_points[k]
-                if im_array_pre[i][j][0] > red_sensitive and im_array_pre[i][j][1] < 20 and im_array_pre[i][j][2] < 20:
+                if im_array_pre[i][j][0] > red_threshold and im_array_pre[i][j][1] < 20 and im_array_pre[i][j][2] < 20:
                     out = True
                     check_times = 2
                     im_array_pre[i][j] = [255, 255, 0]
@@ -411,11 +427,11 @@ def timer(im1, t1):
         print(im_array_pre[pre_white[0], pre_white[1]])
         # Image.fromarray(im_array3).show()
         # return
-        r3 = find_red(im_array_pre)
+        r3 = find_largest_red_square(im_array_pre)
         shape = im_array_pre_backup.shape
         for i in range(shape[0]):
             for j in range(shape[1]):
-                if im_array_pre_backup[i][j][0] > red_sensitive and im_array_pre_backup[i][j][1] < 20 and \
+                if im_array_pre_backup[i][j][0] > red_threshold and im_array_pre_backup[i][j][1] < 20 and \
                         im_array_pre_backup[i][j][2] < 20:
                     l1, l2 = i - shape[0] / 2, j - shape[1] / 2
                     if l1 * l1 + l2 * l2 > shape[0] * shape[0] / 4:
